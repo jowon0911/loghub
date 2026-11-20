@@ -33,6 +33,7 @@ interface PostSummary {
   updatedAt: string
   commentCount: number
   starCount: number
+  viewCount: number      // 상세 조회 횟수 (작성자 본인 조회는 제외)
   starred: boolean       // 요청자가 별을 눌렀는지 (비로그인 false)
   hasImage: boolean      // 본문에 마크다운 이미지가 하나라도 있는지 (목록 아이콘 표시용)
 }
@@ -209,6 +210,7 @@ interface Draft { title: string; content: string; tagsInput: string; updatedAt: 
 
 ### GET /api/posts/{id}
 - 200 + `PostDetail`. 없으면 404.
+- 호출할 때마다 `viewCount` 가 1 올라가고, 올라간 값이 응답에 담긴다. 단, 로그인한 작성자 본인이 조회할 때(수정 화면 진입 포함)는 올리지 않는다.
 
 ### PATCH /api/posts/{id}
 ```json

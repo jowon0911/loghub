@@ -38,7 +38,7 @@ static INLINE_MATH_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\$[^$\n]+
 /// viewer 는 `starred` 계산용 (비로그인은 None → false).
 fn push_base_select(qb: &mut QueryBuilder<'_, Postgres>, viewer: Option<i64>) {
     qb.push(
-        "SELECT p.id, p.title, p.summary, p.content, p.created_at, p.updated_at, \
+        "SELECT p.id, p.title, p.summary, p.content, p.created_at, p.updated_at, p.view_count, \
                 u.nickname, u.avatar_url, \
                 COALESCE(array_agg(DISTINCT t.name::text) FILTER (WHERE t.name IS NOT NULL), ARRAY[]::text[]) AS tags, \
                 (SELECT count(*) FROM comments c WHERE c.post_id = p.id) AS comment_count, \
@@ -129,6 +129,28 @@ pub async fn get_post(
 
     let attachments = attachments::list_for_post(pool, post_id).await?;
     Ok(row.into_detail(attachments))
+}
+
+/// 게시물 상세 화면을 열 때 호출. 조회수를 1 올린 뒤 상세를 돌려준다.
+/// 작성자 본인이 볼 때(수정 화면 진입 포함)는 올리지 않는다. 비로그인(viewer = None)은 항상 올린다.
+pub async fn view_post(
+    pool: &PgPool,
+    post_id: i64,
+    viewer: Option<i64>,
+) -> Result<PostDetail, AppError> {
+    // `view_count + 1` 을 DB 안에서 계산하므로 여러 명이 동시에 열어도 숫자가 빠지지 않는다.
+    // `<>` 는 NULL 과 비교하면 결과가 NULL 이 되어 비로그인 조회가 누락되므로 IS DISTINCT FROM 을 쓴다.
+    sqlx::query(
+        "UPDATE posts SET view_count = view_count + 1 \
+         WHERE id = $1 AND user_id IS DISTINCT FROM $2",
+    )
+    .bind(post_id)
+    .bind(viewer)
+    .execute(pool)
+    .await?;
+
+    // 없는 게시물이면 UPDATE 는 아무 행도 바꾸지 않고, 여기서 404 가 난다
+    get_post(pool, post_id, viewer).await
 }
 
 /// 게시물 작성자 id. 없으면 404.

@@ -16,6 +16,8 @@ export interface PostSummary {
   updatedAt: string
   commentCount: number
   starCount: number
+  /** 상세 조회 횟수 (작성자 본인 조회는 제외) */
+  viewCount: number
   starred: boolean
   hasImage: boolean
 }
