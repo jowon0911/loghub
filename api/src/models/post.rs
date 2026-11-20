@@ -40,7 +40,7 @@ pub struct PostSummary {
     pub updated_at: OffsetDateTime,
     pub comment_count: i64,
     pub star_count: i64,
-    /// 상세 조회 횟수 (작성자 본인 조회는 제외)
+    /// 게시물을 본 로그인 사용자 수 (한 사람당 한 번, 작성자 본인 제외)
     pub view_count: i64,
     pub starred: bool,
     /// 본문에 마크다운 이미지(`![...](...)`)가 하나라도 있는지. 홈 목록의 이미지 아이콘 표시용

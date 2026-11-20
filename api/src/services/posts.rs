@@ -131,25 +131,41 @@ pub async fn get_post(
     Ok(row.into_detail(attachments))
 }
 
-/// 게시물 상세 화면을 열 때 호출. 조회수를 1 올린 뒤 상세를 돌려준다.
-/// 작성자 본인이 볼 때(수정 화면 진입 포함)는 올리지 않는다. 비로그인(viewer = None)은 항상 올린다.
+/// 게시물 상세 화면을 열 때 호출. 조회수를 센 뒤 상세를 돌려준다.
+/// 조회수는 로그인한 사용자가 그 게시물을 **처음** 볼 때만 1 올린다 (한 사람당 한 번).
+/// 비로그인 조회와 작성자 본인 조회(수정 화면 진입 포함)는 세지 않는다.
 pub async fn view_post(
     pool: &PgPool,
     post_id: i64,
     viewer: Option<i64>,
 ) -> Result<PostDetail, AppError> {
-    // `view_count + 1` 을 DB 안에서 계산하므로 여러 명이 동시에 열어도 숫자가 빠지지 않는다.
-    // `<>` 는 NULL 과 비교하면 결과가 NULL 이 되어 비로그인 조회가 누락되므로 IS DISTINCT FROM 을 쓴다.
-    sqlx::query(
-        "UPDATE posts SET view_count = view_count + 1 \
-         WHERE id = $1 AND user_id IS DISTINCT FROM $2",
-    )
-    .bind(post_id)
-    .bind(viewer)
-    .execute(pool)
-    .await?;
+    let author_id = owner_id(pool, post_id).await?; // 존재 확인 (404)
 
-    // 없는 게시물이면 UPDATE 는 아무 행도 바꾸지 않고, 여기서 404 가 난다
+    if let Some(user_id) = viewer
+        && user_id != author_id
+    {
+        let mut tx = pool.begin().await?;
+        // 이미 본 사용자면 PK(post_id, user_id) 충돌로 아무 행도 추가되지 않는다 (별 기능과 같은 방식)
+        let first_view = sqlx::query(
+            "INSERT INTO post_views (post_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+        )
+        .bind(post_id)
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?
+        .rows_affected()
+            == 1;
+
+        // 처음 본 경우에만 +1. 같은 사람이 동시에 여러 번 열어도 INSERT 는 한 번만 성공하므로 한 번만 오른다
+        if first_view {
+            sqlx::query("UPDATE posts SET view_count = view_count + 1 WHERE id = $1")
+                .bind(post_id)
+                .execute(&mut *tx)
+                .await?;
+        }
+        tx.commit().await?;
+    }
+
     get_post(pool, post_id, viewer).await
 }
 

@@ -38,7 +38,7 @@ pub async fn create(
     Ok((StatusCode::CREATED, Json(post)))
 }
 
-/// GET /api/posts/{id} — 조회수 1 증가 (작성자 본인 제외)
+/// GET /api/posts/{id} — 로그인한 사용자가 처음 볼 때만 조회수 1 증가 (작성자 본인 제외)
 pub async fn get(
     State(state): State<AppState>,
     MaybeUser(viewer): MaybeUser,
